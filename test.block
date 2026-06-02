@@ -1,3 +1,5 @@
+run all
+
 target c_stuff {
     rule cc {
         cmd = "gcc -c -MMD -MF $(out).d $(flags) $(in) -o $(out)"
@@ -25,4 +27,9 @@ target c_stuff {
 target clean {
     "cargo clean"
     "rm -rf ./build"
+}
+
+target all {
+    run c_stuff
+    run clean
 }

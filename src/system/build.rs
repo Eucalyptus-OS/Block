@@ -14,9 +14,9 @@ struct Builder {
 }
 
 impl Builder {
-    fn new() -> Self {
+    fn new(initial_vars: HashMap<String, Vec<String>>) -> Self {
         Self {
-            vars: HashMap::new(),
+            vars: initial_vars,
             rules: HashMap::new(),
             targets: HashMap::new(),
         }
@@ -172,8 +172,6 @@ impl Builder {
         if DEBUG.load(Ordering::Relaxed) {
             eprintln!("running target: {name}");
         }
-        // Execute sequentially — Rule stmts register themselves as they're hit,
-        // so Build stmts that follow can find them.
         for stmt in body {
             self.exec_stmt(&stmt, dry_run);
         }
@@ -183,7 +181,6 @@ impl Builder {
         for stmt in stmts {
             if let Stmt::Target { target, body } = stmt {
                 targets.insert(target.clone(), body.clone());
-                // Recurse so nested target declarations are reachable via run
                 Self::register_targets(targets, body);
             }
         }
@@ -192,6 +189,13 @@ impl Builder {
     fn exec_stmt(&mut self, stmt: &Stmt, dry_run: bool) {
         match stmt {
             Stmt::Assign { name, value } => {
+                // --var overrides take priority: skip assignment if already set via CLI
+                if self.vars.contains_key(name.as_str()) {
+                    if DEBUG.load(Ordering::Relaxed) {
+                        eprintln!("{name} = (skipped, overridden by --var)");
+                    }
+                    return;
+                }
                 let expanded = self.expand_expr(value);
                 if DEBUG.load(Ordering::Relaxed) {
                     eprintln!("{name} = {expanded:?}");
@@ -215,8 +219,6 @@ impl Builder {
                 self.vars.remove(var);
             }
             Stmt::Target { target, body } => {
-                // Lazy — body runs only when invoked via `run`.
-                // Registration happened in the pre-pass.
                 let _ = (target, body);
             }
             Stmt::Run(name) => {
@@ -226,10 +228,9 @@ impl Builder {
     }
 }
 
-pub fn build(statements: Vec<Stmt>, dry_run: bool, target: Option<&str>) {
-    let mut builder = Builder::new();
+pub fn build(statements: Vec<Stmt>, dry_run: bool, target: Option<&str>, initial_vars: HashMap<String, Vec<String>>) {
+    let mut builder = Builder::new(initial_vars);
 
-    // Pre-pass: register top-level rules and all targets (recursively).
     for stmt in &statements {
         if let Stmt::Rule(rule) = stmt {
             builder.rules.insert(rule.name.clone(), rule.clone());
