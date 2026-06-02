@@ -1,0 +1,28 @@
+target c_stuff {
+    rule cc {
+        cmd = "gcc -c -MMD -MF $(out).d $(flags) $(in) -o $(out)"
+        depfile = "$(out).d"
+    }
+    
+    rule link {
+        cmd = "gcc $(flags) $(in) -o $(out)"
+    }
+    
+    flags = ["-Wall", "-Wextra"]
+    "mkdir -p build/c_src"
+    
+    for file in c_src/*.c {
+        build "$(file)" -> "build/$(file).o" {
+            rule = cc
+        }
+    }
+    
+    build "build/c_src/hello_world.c.o" "build/c_src/main.c.o" -> "build/hello" {
+        rule = link
+    }
+}
+
+target clean {
+    "cargo clean"
+    "rm -rf ./build"
+}
